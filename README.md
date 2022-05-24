@@ -19,3 +19,10 @@ Open the file analysis in RStudio and load all packages.
 ** Make sure to compile files periodically to avoid bugs or compiling errors. This is an image of one of the RMarkdown chunks compiled with no errors. It is radial SVM plot **
 
 ![SVMradial](https://user-images.githubusercontent.com/39391126/169956680-384235aa-47fa-4215-9f87-1db784573ab1.png)
+
+## Resources
+These are the sources for the data:
+
+1. https://www.openml.org/d/42878\
+2. G. James et al. An Introduction to Statistical Learning with Applications in R,  Springer
+
