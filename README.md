@@ -14,6 +14,6 @@ Download all three data files to the same path:
 1. Autism-Adult-Data.csv
 2. analysis.Rmd
 
-Open the file analysis2 in RStudio and load all packages.
+Open the file analysis in RStudio and load all packages.
 
 ** Make sure to compile files periodically to avoid bugs or compiling errors. This is an image of one of the RMarkdown chunks compiled with no errors. 
