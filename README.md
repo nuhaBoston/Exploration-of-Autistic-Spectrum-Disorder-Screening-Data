@@ -17,3 +17,5 @@ Download all three data files to the same path:
 Open the file analysis in RStudio and load all packages.
 
 ** Make sure to compile files periodically to avoid bugs or compiling errors. This is an image of one of the RMarkdown chunks compiled with no errors. 
+
+![SVMradial](https://user-images.githubusercontent.com/39391126/169956680-384235aa-47fa-4215-9f87-1db784573ab1.png)
