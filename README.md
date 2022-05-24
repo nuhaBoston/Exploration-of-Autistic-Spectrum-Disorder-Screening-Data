@@ -11,9 +11,8 @@ Autistic Spectrum Disorder (ASD)- A neurodevelopment condition associated with s
 ## Installation
 
 Download all three data files to the same path: 
-1. alldat.csv
-2. Crime_Rate_2010_2020.xlsx
-3. analysis2.Rmd
+1. Autism-Adult-Data.csv
+2. analysis.Rmd
 
 Open the file analysis2 in RStudio and load all packages.
 
