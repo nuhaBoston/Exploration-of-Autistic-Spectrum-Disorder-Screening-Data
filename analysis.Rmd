@@ -1,0 +1,475 @@
+---
+title: "Autism Spectrum"
+output: html_notebook
+---
+
+```{r set up workspace}
+setwd("~/Desktop/stats697ds")  
+library(ISLR2)
+library(effects)
+library(tidyverse)
+library(car)
+library(readxl)
+library(GGally)
+library(alr4)
+library(AER)
+library(sjlabelled)
+library(ggcorrplot)
+```
+
+Collecting, Cleaning, and Processing the data
+
+```{r}
+data1 <- read.csv("Autism-Adult-Data.csv", stringsAsFactors = TRUE)
+```
+
+Removed the four variables that were not relevant to Adult Autism Spectrum Detection
+
+```{r}
+dafr = data1[,!(names(data1) %in% c("age_desc", "contry_of_res", "relation", "used_app_before"))]
+```
+
+Age was stored as a char and I convert it to a numeric variable
+
+```{r}
+dafr$age <- as.numeric(as.character(dafr$age))
+```
+
+Removed the data point with age as 383 years because that is an data entry error
+
+```{r}
+dafr <- dafr[!(dafr$age == 383), ]
+```
+
+```{r}
+dafr[ dafr == "?" ] <- NA
+dafr[ dafr == "others"] <- "Others"
+```
+
+```{r}
+delete.na <- function(DF, n=0) {
+  DF[rowSums(is.na(DF)) <= n,]
+}
+
+dafr <- delete.na(dafr)
+```
+
+```{r}
+nums <- colnames(Filter(is.numeric,dafr))
+words <- colnames(Filter(is.character,dafr))
+```
+
+Standardized the numbers in our data 
+```{r}
+dafrStandard <- dafr
+dafrStandard[nums] <- scale(dafrStandard[nums])
+dafrStandard$Class.ASD <-ifelse(dafr$Class.ASD =="YES",1,0)
+```
+
+removed NA instead of using KNN because it isn't appropriate given the contextual background for the missing variables 
+
+
+Exploratory Analysis 
+
+Visual Plots 
+
+```{r}
+scatterplotMatrix(~A1_Score+A2_Score+ A3_Score + A4_Score + A5_Score + A6_Score + A7_Score + A8_Score + A9_Score + A10_Score+ age+result, regLine=F,smooth=F,data=dafr, col="#69b3a2", main = "Scatterplot Matrix of All Possible Regressors Without Ethnicity")
+```
+```{r}
+hist
+hist(dafr$result, main="Histogram for Autism Results", xlab="Results")
+hist(dafr$age, main="Histogram for Ages of Participants", xlab="Ages")
+hist(dafr$A1_Score)
+```
+
+```{r}
+model.matrix(~0+., data=dafr) %>% 
+  cor(use="pairwise.complete.obs") %>% 
+  ggcorrplot(show.diag = F, type="lower", lab=TRUE, lab_size=2)
+```
+
+Building Plots 
+
+This is a classification problem, so regression is the best option. But good for initial model building 
+For validation purposes we partitioned our data in 80% for training and 20% for testing
+
+```{r}
+set.seed(1)
+train <- sample (nrow(dafr), (0.80 * 608))
+training <- dafr[(train), ]
+testing <- dafr[-(train),]
+```
+
+
+```{r}
+glm.fits <- glm( Class.ASD~. -result , data = dafr , subset = train, family = binomial, maxit=25 )
+```
+
+```{r}
+summary(glm.fits)
+```
+```{r}
+glm.pred <- predict(glm.fits, testing , type = "response")
+table(glm.pred , testing$Class.ASD)
+```
+
+```{r}
+lm.fit <- lm(result ~ .-Class.ASD, data = dafr , subset = train)
+summary(lm.fit )
+```
+
+
+```{r}
+library(leaps)
+regfit.full <- regsubsets(result~ .-Class.ASD, data = dafr , subset = train)
+summary(regfit.full)
+```
+
+```{r}
+regfit1.full <- regsubsets(result~ .-Class.ASD, data = dafr , nvmax = 19)
+reg.summary <- summary(regfit1.full) 
+```
+
+
+```{r}
+names(reg.summary)
+```
+
+
+```{r}
+par(mfrow = c(2, 2))
+plot(reg.summary$rss , xlab = "Number of Variables",
+ylab = "RSS", type = "l")
+plot(reg.summary$adjr2 , xlab = "Number of Variables",
+ylab = "Adjusted RSq", type = "l")
+plot(reg.summary$cp, xlab = "Number of Variables",
+ylab = "Cp", type = "l")
+plot(reg.summary$bic, xlab = "Number of Variables",
+ylab = "BIC", type = "l")
+```
+
+
+```{r}
+which.min(reg.summary$bic)
+```
+
+```{r}
+which.max(reg.summary$adjr2)
+```
+
+Determining Best logistic regression model
+
+
+```{r}
+lmbest.fit <- lm(result~A1_Score + A2_Score +  A3_Score + A4_Score + A5_Score + A7_Score + A8_Score + A9_Score +A10_Score, data = dafr )
+summary(lmbest.fit)
+```
+
+```{r}
+coef(regfit1.full , 9)
+```
+
+Implementing 5-fold Cross Validation 
+
+```{r}
+library(boot)
+mean ((dafr$result - predict(lm.fit , dafr))[-train ]^2)
+cv.error.5 <- rep(0, 5)
+for (i in 1:5) {
+  glm.fit <- glm(result ~.-Class.ASD, data = dafr)
+  cv.error.5[i] <- cv.glm(dafr , glm.fit , K = 5)$delta [1]
+  }
+cv.error.5
+mean(cv.error.5)
+```
+
+Implementing 5-fold CV on best logistic regression model 
+Results are a lot better on this model 
+```{r}
+mean ((dafr$result - predict(lmbest.fit , dafr))[-train ]^2)
+cv.error.5 <- rep(0, 5)
+for (i in 1:5) {
+  glm.fit <- glm(result~A1_Score + A2_Score +  A3_Score + A4_Score + A5_Score + A7_Score + A8_Score + A9_Score +A10_Score, data = dafr)
+  cv.error.5[i] <- cv.glm(dafr , glm.fit , K = 5)$delta [1]
+  }
+cv.error.5
+mean(cv.error.5)
+```
+
+Ridge Regression
+
+```{r}
+library(glmnet)
+
+x <- model.matrix(Class.ASD~.-result,dafrStandard)
+y <- dafrStandard$Class.ASD
+x
+```
+
+```{r}
+grid <- 10^seq(10, -2, length = 100)
+ridge.mod <- glmnet(x, y, alpha = 0, lambda = grid,standardize = FALSE)
+```
+
+```{r}
+dim(coef(ridge.mod))
+coef(ridge.mod)[, 50]
+sqrt(sum(coef(ridge.mod)[-1, 50]^2))
+```
+```{r}
+set.seed (500)
+sampsize <- floor(0.8*nrow(x))
+training <- sample(seq_len(nrow(x)), size = sampsize)
+#training <- df[(1:351),]
+testing <- -(training)
+y.testing <- y[testing]
+```
+
+
+Error Rate for Ridge Regression
+
+```{r}
+ridge.mod <- glmnet(x[training,], y[training], alpha = 0, lambda = grid, thresh = 1e-12)
+ridge.pred <- predict(ridge.mod, s = 5, newx = x[testing, ])
+mean((ridge.pred - y.testing)^2)
+plot(ridge.mod)
+```
+
+Lasso regression 
+
+
+```{r}
+lasso.mod <- glmnet(x[training, ], y[training], alpha = 1, lambda = grid)
+plot(lasso.mod)
+```
+Determining error rate for lasso model  
+```{r}
+set.seed(300)
+cv.out <- cv.glmnet(x[training, ], y[training], alpha = 1)
+plot(cv.out)
+bestlam <- cv.out$lambda.min
+lasso.pred <- predict(lasso.mod , s = bestlam, newx = x[testing, ])
+mean((lasso.pred - y.testing)^2)
+```
+
+AIC, BIC of Ridge Regression 
+```{r}
+tLL <- ridge.mod$nulldev - deviance(ridge.mod)
+k <- ridge.mod$df
+n <- ridge.mod$nobs
+AIC <- -tLL+2*k+2*k*(k+1)/(n-k-1)
+BIC <- BIC<-log(n)*k - tLL
+AIC 
+BIC
+```
+R^2 for Ridge 
+
+```{r}
+real <- y[-training]
+prediction <- ridge.pred
+trss <- sum((prediction - real)^2)
+ttss <- sum((real - mean(real))^2)
+rsquared <- 1 - (trss/ttss)
+rsquared
+```
+R^2 for Lasso
+```{r}
+real <- y[-training]
+prediction <- lasso.pred
+trss <- sum((prediction - real)^2)
+ttss <- sum((real - mean(real))^2)
+rsquared <- 1 - (trss/ttss)
+rsquared
+```
+
+
+AIC, BIC of Lasso Regression 
+```{r}
+tLL <- lasso.mod$nulldev - deviance(lasso.mod)
+k <- lasso.mod$df
+n <- lasso.mod$nobs
+AIC <- -tLL+2*k+2*k*(k+1)/(n-k-1)
+BIC <- BIC<-log(n)*k - tLL
+AIC 
+BIC
+```
+
+
+Tree- Based Methods 
+
+
+```{r}
+library(tree)
+tree.ASD <- tree(Class.ASD~. - result, dafr, subset = train)
+```
+```{r}
+summary(tree.ASD)
+```
+
+```{r}
+plot(tree.ASD)
+text(tree.ASD , pretty = 0)
+```
+
+Confusion Matrix for Tree 
+
+```{r}
+tree.pred <- predict(tree.ASD, testing , type = "class")
+table(tree.pred , testing$Class.ASD)
+(75+29)/122
+```
+
+Implementing pruning on trees to determine best model 
+
+```{r}
+cv.ASD <- cv.tree(tree.ASD, FUN = prune.misclass)
+names(cv.ASD)
+cv.ASD$size
+cv.ASD$dev
+```
+```{r}
+prune.ASD <- prune.misclass(tree.ASD , best = 9)
+plot(prune.ASD)
+text(prune.ASD , pretty = 0)
+```
+
+Confusion Matrix on Best Pruned Tree 
+```{r}
+treeprune.pred <- predict(prune.ASD , testing , type = "class")
+table(treeprune.pred , testing$Class.ASD)
+(75+36)/123
+```
+
+Bagging and Random Forest
+
+```{r}
+library(randomForest)
+set.seed(1)
+```
+
+```{r}
+bag.ASD <- randomForest(Class.ASD~.- result, data = dafr , subset = train, mtry = 15, importance = TRUE ) 
+bag.ASD
+```
+
+Confusion Matrix on bagging model 
+
+```{r}
+yhatASD.bag <- predict(bag.ASD, newdata = testing)
+table(yhatASD.bag , testing$Class.ASD)
+(79+38)/123
+```
+
+
+
+
+
+```{r}
+set.seed(2)
+rf.ASD <- randomForest(Class.ASD~.-result, data = dafr, subset = train , importance = TRUE)
+yhatASD.rf <- predict(rf.ASD, newdata = testing)
+table(yhatASD.rf , testing$Class.ASD)
+(80+38)/123
+```
+```{r}
+importance(rf.ASD)
+```
+
+
+Variable Importance Plots 
+
+
+```{r}
+varImpPlot(rf.ASD)
+```
+
+Boosting Model 
+
+```{r}
+dafrBoost = dafr 
+levels(dafrBoost$Class.ASD)
+dafrBoost$Class.ASD <- as.numeric(dafrBoost$Class.ASD) -1 
+trainingBoost <- dafrBoost[(train), ]
+testingBoost <- dafrBoost[-(train), ]
+```
+
+
+
+```{r}
+library(gbm)
+set.seed(5)
+boost.ASD <- gbm(Class.ASD~ .-result, data =trainingBoost,
+distribution = "bernoulli", n.trees = 5000, interaction.depth = 4)
+```
+
+```{r}
+summary(boost.ASD)
+```
+
+Error Rate for Boosting Model
+
+```{r}
+yhatASD.boost <- predict(boost.ASD , newdata = testingBoost, n.trees = 5000)
+mean (( yhatASD.boost - testingBoost$Class.ASD)^2)
+```
+
+Determining SVM Model
+
+```{r}
+library(e1071)
+set.seed(10)
+svmfit <- svm(Class.ASD~ A9_Score + A5_Score, data = training , kernel = "linear", cost = 10, scale = FALSE)
+summary(svmfit)
+#plot(svmfit, training)
+```
+
+```{r}
+svmAut.classifier = tune(svm, Class.ASD~ A9_Score + A5_Score, data = training, kernel ="linear", ranges =list(cost=c(0.1, 1,10)))
+summary(svmAut.classifier)
+```
+
+Using a linear kernel
+
+
+```{r}
+library(ROCR)
+d = data.frame(training$Class.ASD, training$A9_Score, training$A5_Score)
+abc1 <-svm(training.Class.ASD ~ training.A9_Score + training.A5_Score, data = d, kernel ="linear", cost =0.1, type = "C-classification", decision.values =T)
+abc2 <-svm(training.Class.ASD ~ training.A9_Score + training.A5_Score, data = d, kernel ="linear", cost =1, type = "C-classification", decision.values =T)
+abc3 <-svm(training.Class.ASD ~ training.A9_Score + training.A5_Score, data = d, kernel ="linear", cost =10, type = "C-classification", decision.values =T)
+plot(abc1, d, xlab = "x1", ylab = "x2" )
+plot(abc2, d, xlab = "x1", ylab = "x2")
+plot(abc3, d, xlab = "x1", ylab = "x2")
+```
+
+
+```{r}
+rocplot =function (pred , truth , ...){
+  predob = prediction (pred , truth )
+  perf = performance (predob , "tpr ", "fpr ")
+  plot(perf ,...)}
+```
+
+```{r}
+fitted1 = attributes(predict (abc1 ,d, decision.values =TRUE))$decision.values
+fitted2 = attributes(predict (abc2 ,d, decision.values =TRUE))$decision.values
+fitted3 = attributes(predict (abc3 ,d, decision.values =TRUE))$decision.values
+```
+
+Using a radial kernel to determine SVM
+
+
+```{r}
+svmAut.gamma = tune(svm, Class.ASD~ A9_Score + A5_Score, data = training, kernel ="radial", cost = 0.1, ranges =list( gamma=c(0.01,0.1,1)))
+summary(svmAut.gamma)
+```
+
+```{r}
+def1 <-svm(training.Class.ASD ~ training.A9_Score + training.A5_Score, data = d, kernel ="radial", cost =0.1, gamma = 0.01, type = "C-classification", decision.values =T)
+def2 <-svm(training.Class.ASD ~ training.A9_Score + training.A5_Score, data = d, kernel ="radial", cost =0.1, gamma = 0.1, type = "C-classification", decision.values =T)
+def3 <-svm(training.Class.ASD ~ training.A9_Score + training.A5_Score, data = d, kernel ="radial", cost =0.1, gamma = 1, type = "C-classification", decision.values =T)
+plot(def1, d)
+plot(def2, d)
+plot(def3, d)
+```
